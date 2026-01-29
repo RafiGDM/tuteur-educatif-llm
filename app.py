@@ -89,8 +89,22 @@ Question de l'étudiant :
         with st.spinner("⏳ Génération de la réponse pédagogique..."):
             resultat = appeler_llm(prompt)
 
-        if isinstance(resultat, list) and "generated_text" in resultat[0]:
+                # -----------------------------
+        # GESTION DES RÉPONSES API
+        # -----------------------------
+        if isinstance(resultat, list):
             st.success("✅ Réponse du tuteur")
             st.write(resultat[0]["generated_text"])
+
+        elif isinstance(resultat, dict) and "error" in resultat:
+            if "loading" in resultat["error"].lower():
+                st.warning(
+                    "⏳ Le modèle est en cours de chargement. "
+                    "Veuillez réessayer dans quelques secondes."
+                )
+            else:
+                st.error(f"❌ Erreur du modèle : {resultat['error']}")
+
         else:
-            st.error("❌ Erreur lors de la génération de la réponse.")
+            st.error("❌ Réponse inattendue de l’API Hugging Face.")
+
