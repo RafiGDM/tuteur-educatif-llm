@@ -1,96 +1,67 @@
 import streamlit as st
 import requests
-import os
+import json
 
-# -----------------------------
-# CONFIGURATION DE LA PAGE
-# -----------------------------
-st.set_page_config(
-    page_title="Tuteur Éducatif Personnalisé (LLM)",
-    page_icon=" ",
-    layout="centered"
-)
-
+st.set_page_config(page_title="Tuteur Éducatif", layout="centered")
 st.title("Tuteur Éducatif Personnalisé")
-st.write(
-    "Ce tuteur utilise un **Large Language Model (LLM)** pour accompagner "
-    "les étudiants de **Licence 3 Informatique** de manière personnalisée."
-)
 
-# -----------------------------
-# PARAMÈTRES UTILISATEUR
-# -----------------------------
-matiere = st.selectbox(
-    "Choisissez la matière :",
-    ["Programmation Python", "Algorithmique et structures de données"]
-)
+# Interface
+matiere = st.selectbox("Matière :", ["Programmation Python", "Algorithmique et structures de données"])
+niveau = st.selectbox("Niveau :", ["Débutant", "Intermédiaire", "Avancé"])
+question = st.text_area("Votre question :", placeholder="Explique les boucles en Python")
 
-niveau = st.selectbox(
-    "Choisissez votre niveau :",
-    ["Débutant", "Intermédiaire", "Avancé"]
-)
+# 🔍 DEBUG 1 : Vérifiez si les secrets existent
+st.sidebar.write("🔍 **DEBUG SECRETS**")
+st.sidebar.write("Secrets disponibles:", list(st.secrets.keys()) if st.secrets else "Aucun")
 
-question = st.text_area(
-    "Posez votre question :",
-    placeholder="Ex : Explique-moi les boucles en Python"
-)
+# Token avec vérification
+HF_API_TOKEN = st.secrets.get("HF_API_TOKEN") 
 
-# -----------------------------
-# CLÉ API HUGGING FACE
-# -----------------------------
-HF_API_TOKEN = os.getenv("HF_API_TOKEN")
+# 🔍 DEBUG 2 : Montrez le token (partiellement)
+if HF_API_TOKEN:
+    st.sidebar.write("✅ Token présent (premiers chars):", HF_API_TOKEN[:10] + "...")
+else:
+    st.sidebar.error("❌ Token NON trouvé dans st.secrets")
 
-API_URL = "https://api-inference.huggingface.co/models/mistralai/Mistral-7B-Instruct-v0.2"
-headers = {
-    "Authorization": f"Bearer {HF_API_TOKEN}"
-}
+# Modèle
+API_URL = "https://api-inference.huggingface.co/models/google/flan-t5-large"
+headers = {"Authorization": f"Bearer {HF_API_TOKEN}"} if HF_API_TOKEN else {}
 
-# -----------------------------
-# FONCTION D'APPEL AU LLM
-# -----------------------------
 def appeler_llm(prompt):
-    payload = {
-        "inputs": prompt,
-        "parameters": {
-            "max_new_tokens": 500,
-            "temperature": 0.7
+    try:
+        payload = {
+            "inputs": prompt,
+            "parameters": {"max_length": 500, "temperature": 0.7}
         }
-    }
-    response = requests.post(API_URL, headers=headers, json=payload)
-    return response.json()
+        st.sidebar.write("📡 Envoi à l'API...")
+        response = requests.post(API_URL, headers=headers, json=payload, timeout=30)
+        st.sidebar.write("📥 Réponse reçue, statut:", response.status_code)
+        return response.json()
+    except Exception as e:
+        return {"error": str(e)}
 
-# -----------------------------
-# BOUTON DE GÉNÉRATION
-# -----------------------------
 if st.button("Obtenir l'explication"):
-
     if not HF_API_TOKEN:
-        st.error("Clé API Hugging Face manquante.")
-    elif question.strip() == "":
-        st.warning("Veuillez entrer une question.")
+        st.error("❌ Token Hugging Face manquant. Vérifiez les Secrets dans Streamlit Cloud.")
+    elif not question.strip():
+        st.warning("Entrez une question")
     else:
-        prompt = f"""
-Tu es un tuteur éducatif universitaire pour un étudiant en Licence 3 Informatique.
-
-Matière : {matiere}
-Niveau de l'étudiant : {niveau}
-
-Règles pédagogiques :
-- Adapter le langage au niveau
-- Expliquer progressivement
-- Donner des exemples clairs
-- Encourager l'étudiant
-- Poser une question à la fin pour vérifier la compréhension
-
-Question de l'étudiant :
-{question}
-"""
-
-        with st.spinner("Génération de la réponse pédagogique..."):
+        prompt = f"""Explique {question} pour un niveau {niveau} en {matiere}"""
+        
+        with st.spinner("Génération en cours..."):
             resultat = appeler_llm(prompt)
-
-        if isinstance(resultat, list) and "generated_text" in resultat[0]:
-            st.success("Réponse du tuteur")
-            st.write(resultat[0]["generated_text"])
+        
+        st.write("## Résultat brut de l'API :")
+        st.json(resultat)
+        
+        if "error" in resultat:
+            st.error(f"Erreur API: {resultat['error']}")
+        elif isinstance(resultat, list) and len(resultat) > 0:
+            if "generated_text" in resultat[0]:
+                st.success("✅ Réponse générée :")
+                st.write(resultat[0]["generated_text"])
+            else:
+                st.error("Format de réponse inconnu")
+                st.write(resultat[0])
         else:
-            st.error("Erreur lors de la génération de la réponse.")
+            st.error("Réponse vide ou format inattendu")
