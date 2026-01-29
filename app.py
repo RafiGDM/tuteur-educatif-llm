@@ -86,7 +86,23 @@ def appeler_llm(prompt):
         timeout=60
     )
 
-    return response.json()
+    # Vérifier le statut HTTP
+    if response.status_code != 200:
+        return {
+            "error": f"HTTP {response.status_code} : {response.text}"
+        }
+
+    # Vérifier que la réponse est bien du JSON
+    content_type = response.headers.get("Content-Type", "")
+
+    if "application/json" in content_type:
+        return response.json()
+    else:
+        return {
+            "error": "Réponse non JSON reçue depuis Hugging Face",
+            "raw_response": response.text[:500]
+        }
+
 
 
 # -----------------------------
@@ -116,10 +132,10 @@ Question de l'étudiant :
 {question}
 """
 
-        with st.spinner("Génération de la réponse pédagogique..."):
-            resultat = appeler_llm(prompt)
+    with st.spinner("Génération de la réponse pédagogique..."):
+        resultat = appeler_llm(prompt)
 
-                # -----------------------------
+        # -----------------------------
         # GESTION DES RÉPONSES API
         # -----------------------------
         if isinstance(resultat, list):
@@ -127,14 +143,7 @@ Question de l'étudiant :
             st.write(resultat[0]["generated_text"])
 
         elif isinstance(resultat, dict) and "error" in resultat:
-            if "loading" in resultat["error"].lower():
-                st.warning(
-                    "Le modèle est en cours de chargement. "
-                    "Veuillez réessayer dans quelques secondes."
-                )
-            else:
-                st.error(f"Erreur du modèle : {resultat['error']}")
+            st.error(f"{resultat['error']}")
 
         else:
-            st.error("Réponse inattendue de l’API Hugging Face.")
-
+            st.error("Réponse inattendue du modèle.")
