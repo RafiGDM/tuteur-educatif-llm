@@ -1,55 +1,96 @@
 import streamlit as st
 import requests
-import json
+import os
 
-st.set_page_config(page_title="Tuteur Éducatif", layout="centered")
-st.title("Tuteur Éducatif Personnalisé")
+# -----------------------------
+# CONFIGURATION DE LA PAGE
+# -----------------------------
+st.set_page_config(
+    page_title="Tuteur Éducatif Personnalisé (LLM)",
+    page_icon="🎓",
+    layout="centered"
+)
 
-# Interface
-matiere = st.selectbox("Matière :", ["Programmation Python", "Algorithmique et structures de données"])
-niveau = st.selectbox("Niveau :", ["Débutant", "Intermédiaire", "Avancé"])
-question = st.text_area("Votre question :", placeholder="Explique les boucles en Python")
+st.title("🎓 Tuteur Éducatif Personnalisé")
+st.write(
+    "Ce tuteur utilise un **Large Language Model (LLM)** pour accompagner "
+    "les étudiants de **Licence 3 Informatique** de manière personnalisée."
+)
 
-# Token
-HF_API_TOKEN = st.secrets.get("HF_API_TOKEN")
+# -----------------------------
+# PARAMÈTRES UTILISATEUR
+# -----------------------------
+matiere = st.selectbox(
+    "📘 Choisissez la matière :",
+    ["Programmation Python", "Algorithmique et structures de données"]
+)
 
-# 🔴 CORRECTION ICI : NOUVELLE URL
-API_URL = "https://router.huggingface.co/google/flan-t5-large"
-headers = {"Authorization": f"Bearer {HF_API_TOKEN}"}
+niveau = st.selectbox(
+    "🎯 Choisissez votre niveau :",
+    ["Débutant", "Intermédiaire", "Avancé"]
+)
 
+question = st.text_area(
+    "✏️ Posez votre question :",
+    placeholder="Ex : Explique-moi les boucles en Python"
+)
+
+# -----------------------------
+# CLÉ API HUGGING FACE
+# -----------------------------
+HF_API_TOKEN = os.getenv("HF_API_TOKEN")
+
+API_URL = "https://api-inference.huggingface.co/models/mistralai/Mistral-7B-Instruct-v0.2"
+headers = {
+    "Authorization": f"Bearer {HF_API_TOKEN}"
+}
+
+# -----------------------------
+# FONCTION D'APPEL AU LLM
+# -----------------------------
 def appeler_llm(prompt):
-    try:
-        payload = {
-            "inputs": prompt,
-            "parameters": {"max_length": 500, "temperature": 0.7}
+    payload = {
+        "inputs": prompt,
+        "parameters": {
+            "max_new_tokens": 500,
+            "temperature": 0.7
         }
-        response = requests.post(API_URL, headers=headers, json=payload, timeout=30)
-        return response.json()
-    except Exception as e:
-        return {"error": str(e)}
+    }
+    response = requests.post(API_URL, headers=headers, json=payload)
+    return response.json()
 
-if st.button("Obtenir l'explication"):
+# -----------------------------
+# BOUTON DE GÉNÉRATION
+# -----------------------------
+if st.button("📤 Obtenir l'explication"):
+
     if not HF_API_TOKEN:
-        st.error("Token manquant")
-    elif not question.strip():
-        st.warning("Entrez une question")
+        st.error("❌ Clé API Hugging Face manquante.")
+    elif question.strip() == "":
+        st.warning("⚠️ Veuillez entrer une question.")
     else:
-        prompt = f"""Explique {question} pour un niveau {niveau} en {matiere}. 
-        Sois pédagogique et donne des exemples."""
-        
-        with st.spinner("Génération en cours..."):
+        prompt = f"""
+Tu es un tuteur éducatif universitaire pour un étudiant en Licence 3 Informatique.
+
+Matière : {matiere}
+Niveau de l'étudiant : {niveau}
+
+Règles pédagogiques :
+- Adapter le langage au niveau
+- Expliquer progressivement
+- Donner des exemples clairs
+- Encourager l'étudiant
+- Poser une question à la fin pour vérifier la compréhension
+
+Question de l'étudiant :
+{question}
+"""
+
+        with st.spinner("⏳ Génération de la réponse pédagogique..."):
             resultat = appeler_llm(prompt)
-        
-        # 🔍 Debug
-        st.write("Réponse brute de l'API :", resultat)
-        
-        if "error" in resultat:
-            st.error(f"Erreur API: {resultat['error']}")
-        elif isinstance(resultat, list) and len(resultat) > 0:
-            if "generated_text" in resultat[0]:
-                st.success("✅ Réponse :")
-                st.write(resultat[0]["generated_text"])
-            else:
-                st.write("Contenu :", resultat[0])
+
+        if isinstance(resultat, list) and "generated_text" in resultat[0]:
+            st.success("✅ Réponse du tuteur")
+            st.write(resultat[0]["generated_text"])
         else:
-            st.error("Format de réponse inattendu")
+            st.error("❌ Erreur lors de la génération de la réponse.")
